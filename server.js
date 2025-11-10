@@ -33,10 +33,12 @@ const dbPool = mysql.createPool({
 // ---- Configurar el "Transportador" de Email ----
 // Esto le dice a Nodemailer cómo conectarse a tu Gmail
 const transporter = nodemailer.createTransport({
-    service: 'gmail', // Usamos Gmail
+    host: "smtp.gmail.com",
+    port: 465, // Puerto SSL (el otro estándar de Gmail)
+    secure: true, // true para el puerto 465
     auth: {
-        user: process.env.EMAIL_USER, // Tu correo (del .env)
-        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" (del .env)
+        user: process.env.EMAIL_USER, // Tu correo
+        pass: process.env.EMAIL_PASS  // Tu contraseña de app de 16 letras
     }
 });
 // ---- FIN ----
