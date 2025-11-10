@@ -227,7 +227,7 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
 
     } catch (error) {
         console.error("Error al consultar próximos cumpleaños:", error);
-        res.status(5G00).json({ mensaje: "Error en el servidor" });
+        res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
 
