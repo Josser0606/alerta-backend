@@ -3,11 +3,11 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 
-// ---- NUEVO: Importar las herramientas para email y cron ----
+// ---- Importar las herramientas para email y cron ----
 require('dotenv').config(); // Carga las variables del .env
 const nodemailer = require('nodemailer');
 const cron = require('node-cron');
-// ---- FIN NUEVO ----
+// ---- FIN ----
 
 // 2. Crear la aplicación de Express
 const app = express();
@@ -17,7 +17,6 @@ app.use(cors());
 app.use(express.json()); 
 
 // 4. Configurar la conexión a la Base de Datos
-// (Tus datos de conexión)
 // El servidor de Render nos da las variables
 const dbPool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -31,7 +30,7 @@ const dbPool = mysql.createPool({
 }).promise();
 
 
-// ---- NUEVO: Configurar el "Transportador" de Email ----
+// ---- Configurar el "Transportador" de Email ----
 // Esto le dice a Nodemailer cómo conectarse a tu Gmail
 const transporter = nodemailer.createTransport({
     service: 'gmail', // Usamos Gmail
@@ -40,19 +39,31 @@ const transporter = nodemailer.createTransport({
         pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" (del .env)
     }
 });
-// ---- FIN NUEVO ----
+// ---- FIN ----
 
 
-// ---- NUEVO: Tarea Programada (CRON JOB) ----
-// Esto se ejecutará "a las 8:00 AM, todos los días"
-// Formato: (minuto hora día-del-mes mes día-de-la-semana)
+// ---- Tareas Programadas (CRON JOBS) ----
+
+// TAREA 1 (Existente): Aviso de 4 días antes
 cron.schedule('0 8 * * *', () => {
-    console.log('--- CRON JOB: Ejecutando revisión de cumpleaños (4 días) ---');
+    console.log('--- CRON JOB (4 DÍAS): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosCuatroDias();
 }, {
     timezone: "America/Bogota" // ¡Ajusta tu zona horaria!
 });
 
+// ---- NUEVO: TAREA 2 (HOY) ----
+// Se ejecuta a las 8:01 AM (un minuto después de la otra)
+cron.schedule('1 8 * * *', () => {
+    console.log('--- CRON JOB (HOY): Ejecutando revisión de cumpleaños ---');
+    revisarCumpleanosHoy();
+}, {
+    timezone: "America/Bogota"
+});
+// ---- FIN NUEVO ----
+
+
+// Función para la Tarea 1 (4 días)
 async function revisarCumpleanosCuatroDias() {
     try {
         // 1. Consulta SQL para buscar cumpleaños en EXACTAMENTE 4 días
@@ -71,7 +82,7 @@ async function revisarCumpleanosCuatroDias() {
 
         // 2. Si encontramos resultados, enviamos el email
         if (resultados.length > 0) {
-            console.log(`¡Encontrados ${resultados.length} cumpleaños! Enviando email...`);
+            console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)! Enviando email...`);
             
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
             
@@ -85,14 +96,54 @@ async function revisarCumpleanosCuatroDias() {
 
             // 4. Enviar el Email
             await transporter.sendMail(mailOptions);
-            console.log('--- Email de alerta enviado con éxito ---');
+            console.log('--- Email de alerta (4 días) enviado con éxito ---');
 
         } else {
             console.log('--- No se encontraron cumpleaños en 4 días. No se envía email. ---');
         }
 
     } catch (error) {
-        console.error('Error en el cron job de cumpleaños:', error);
+        console.error('Error en el cron job (4 días):', error);
+    }
+}
+
+// ---- NUEVO: Función para la Tarea 2 (HOY) ----
+async function revisarCumpleanosHoy() {
+    try {
+        // 1. Consulta SQL para buscar cumpleaños de HOY
+        const sqlQuery = `
+            SELECT nombre_completo 
+            FROM cumpleaneros 
+            WHERE 
+                fecha_nacimiento IS NOT NULL
+                AND
+                MONTH(fecha_nacimiento) = MONTH(CURDATE())
+                AND 
+                DAY(fecha_nacimiento) = DAY(CURDATE());
+        `;
+        const [resultados] = await dbPool.query(sqlQuery);
+
+        // 2. Si encontramos resultados, enviamos el email
+        if (resultados.length > 0) {
+            console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)! Enviando email...`);
+            
+            const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
+            
+            const mailOptions = {
+                from: process.env.EMAIL_USER,
+                to: process.env.EMAIL_USER,   
+                subject: '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)',
+                text: `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`
+            };
+
+            await transporter.sendMail(mailOptions);
+            console.log('--- Email de alerta (HOY) enviado con éxito ---');
+
+        } else {
+            console.log('--- No se encontraron cumpleaños (HOY). No se envía email. ---');
+        }
+    } catch (error) {
+        console.error('Error en el cron job (HOY):', error);
     }
 }
 // ---- FIN NUEVO ----
@@ -176,7 +227,7 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
 
     } catch (error) {
         console.error("Error al consultar próximos cumpleaños:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        res.status(5G00).json({ mensaje: "Error en el servidor" });
     }
 });
 
@@ -184,6 +235,8 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
 const PORT = 3001;
 app.listen(PORT, () => {
     console.log(`Servidor API corriendo en http://localhost:${PORT}`);
-    // ---- NUEVO: Mensaje de que el cron está activo ----
-    console.log('Tarea CRON de emails activada. Se ejecutará todos los días a las 8:00 AM.');
+    // Mensaje de que los cron están activos
+    console.log('Tarea CRON (4 días) activada. Se ejecutará todos los días a las 8:00 AM.');
+    // ---- NUEVO MENSAJE ----
+    console.log('Tarea CRON (HOY) activada. Se ejecutará todos los días a las 8:01 AM.');
 });
