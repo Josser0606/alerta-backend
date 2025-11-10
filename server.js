@@ -18,15 +18,17 @@ app.use(express.json());
 
 // 4. Configurar la conexión a la Base de Datos
 // (Tus datos de conexión)
+// El servidor de Render nos da las variables
 const dbPool = mysql.createPool({
-    host: 'localhost',      // O '127.0.0.1'
-    user: 'root',           // Tu usuario de MySQL (suele ser 'root')
-    password: '1234', // Tu contraseña de MySQL
-    database: 'voluntariado_db', // El nombre del Schema que creaste
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
+    port: process.env.DB_PORT, // ¡Asegúrate de añadir el puerto!
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0
-}).promise(); // ¡Importante usar .promise() para código más limpio!
+}).promise();
 
 
 // ---- NUEVO: Configurar el "Transportador" de Email ----
