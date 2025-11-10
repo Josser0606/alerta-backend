@@ -231,6 +231,24 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
     }
 });
 
+// ---- RUTAS DE PRUEBA TEMPORALES ----
+
+// Botón de prueba para la alerta de HOY
+app.get('/api/test-email-hoy', async (req, res) => {
+    console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
+    await revisarCumpleanosHoy();
+    res.json({ mensaje: "Prueba de email (HOY) ejecutada. Revisa los logs de Render y tu correo." });
+});
+
+// Botón de prueba para la alerta de 4 DÍAS
+app.get('/api/test-email-4dias', async (req, res) => {
+    console.log("¡¡PRUEBA MANUAL DE EMAIL (4 DÍAS) INICIADA!!");
+    await revisarCumpleanosCuatroDias();
+    res.json({ mensaje: "Prueba de email (4 DÍAS) ejecutada. Revisa los logs de Render y tu correo." });
+});
+
+// ---- FIN DE RUTAS DE PRUEBA ----
+
 // 6. Iniciar el servidor
 const PORT = 3001;
 app.listen(PORT, () => {
@@ -240,3 +258,4 @@ app.listen(PORT, () => {
     // ---- NUEVO MENSAJE ----
     console.log('Tarea CRON (HOY) activada. Se ejecutará todos los días a las 8:01 AM.');
 });
+
