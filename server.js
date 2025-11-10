@@ -33,12 +33,10 @@ const dbPool = mysql.createPool({
 // ---- Configurar el "Transportador" de Email ----
 // Esto le dice a Nodemailer cómo conectarse a tu Gmail
 const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465, // Puerto SSL (el otro estándar de Gmail)
-    secure: true, // true para el puerto 465
+    service: 'gmail', // Usamos Gmail
     auth: {
-        user: process.env.EMAIL_USER, // Tu correo
-        pass: process.env.EMAIL_PASS  // Tu contraseña de app de 16 letras
+        user: process.env.EMAIL_USER, // Tu correo (del .env)
+        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" (del .env)
     }
 });
 // ---- FIN ----
@@ -229,7 +227,7 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
 
     } catch (error) {
         console.error("Error al consultar próximos cumpleaños:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        res.status(5G00).json({ mensaje: "Error en el servidor" });
     }
 });
 
