@@ -29,12 +29,18 @@ const dbPool = mysql.createPool({
 }).promise();
 
 
-// ---- Configurar el "Transportador" de Email ----
+// ---- Configurar el "Transportador" de Email (MODIFICADO) ----
+// En lugar de 'service: "gmail"', usamos la config explícita
 const transporter = nodemailer.createTransport({
-    service: 'gmail', 
+    host: 'smtp.gmail.com', // Host de Gmail
+    port: 587,              // Puerto TLS (más común)
+    secure: false,          // false para TLS
     auth: {
         user: process.env.EMAIL_USER, // Tu correo (del .env)
-        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" (del .env)
+        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" de 16 letras
+    },
+    tls: {
+        rejectUnauthorized: false // A veces necesario en servidores en la nube
     }
 });
 // ---- FIN ----
