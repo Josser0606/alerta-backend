@@ -33,14 +33,16 @@ const dbPool = mysql.createPool({
 const transporter = nodemailer.createTransport({
     service: 'gmail', 
     auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS 
+        user: process.env.EMAIL_USER, // Tu correo (del .env)
+        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" (del .env)
     }
 });
 // ---- FIN ----
 
 
 // ---- Tareas Programadas (CRON JOBS) ----
+
+// TAREA 1 (Existente): Aviso de 4 días antes
 cron.schedule('0 8 * * *', () => {
     console.log('--- CRON JOB (4 DÍAS): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosCuatroDias();
@@ -48,6 +50,7 @@ cron.schedule('0 8 * * *', () => {
     timezone: "America/Bogota"
 });
 
+// TAREA 2 (HOY)
 cron.schedule('1 8 * * *', () => {
     console.log('--- CRON JOB (HOY): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosHoy();
@@ -57,7 +60,7 @@ cron.schedule('1 8 * * *', () => {
 // ---- FIN ----
 
 
-// ---- Funciones de Tareas Programadas ----
+// Función para la Tarea 1 (4 días)
 async function revisarCumpleanosCuatroDias() {
     try {
         const sqlQuery = `
@@ -75,12 +78,14 @@ async function revisarCumpleanosCuatroDias() {
         if (resultados.length > 0) {
             console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)! Enviando email...`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
+            
             const mailOptions = {
                 from: process.env.EMAIL_USER,
                 to: process.env.EMAIL_USER,   
                 subject: '🔔 Alerta de Próximos Cumpleaños (en 4 días)',
                 text: `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`
             };
+
             await transporter.sendMail(mailOptions);
             console.log('--- Email de alerta (4 días) enviado con éxito ---');
         } else {
@@ -91,6 +96,7 @@ async function revisarCumpleanosCuatroDias() {
     }
 }
 
+// Función para la Tarea 2 (HOY)
 async function revisarCumpleanosHoy() {
     try {
         const sqlQuery = `
@@ -108,12 +114,14 @@ async function revisarCumpleanosHoy() {
         if (resultados.length > 0) {
             console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)! Enviando email...`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
+            
             const mailOptions = {
                 from: process.env.EMAIL_USER,
                 to: process.env.EMAIL_USER,   
                 subject: '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)',
                 text: `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`
             };
+
             await transporter.sendMail(mailOptions);
             console.log('--- Email de alerta (HOY) enviado con éxito ---');
         } else {
@@ -126,10 +134,10 @@ async function revisarCumpleanosHoy() {
 // ---- FIN FUNCIONES CRON ----
 
 
-// 5. RUTAS API
+// 5. TUS RUTAS API (Endpoints)
 // -----------------------------------------------------------------
 
-// Ruta para HOY (Existente)
+// Ruta para cumpleaños de HOY (Existente, para la tarjeta)
 app.get('/api/cumpleaneros/hoy', async (req, res) => {
     console.log("¡Recibida petición para cumpleaños de hoy!");
     try {
@@ -149,7 +157,7 @@ app.get('/api/cumpleaneros/hoy', async (req, res) => {
     }
 });
 
-// Ruta para PRÓXIMOS (Existente)
+// Ruta para los PRÓXIMOS 7 DÍAS (Existente, para la tarjeta)
 app.get('/api/cumpleaneros/proximos', async (req, res) => {
     console.log("¡Recibida petición para próximos cumpleaños!");
     try {
@@ -190,7 +198,7 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
     }
 });
 
-// ---- RUTA NUEVA PARA RESUMEN (NOTIFICACIONES) ----
+// ---- NUEVO: RUTA PARA EL PANEL DE NOTIFICACIONES (RESUMEN) ----
 app.get('/api/cumpleaneros/resumen', async (req, res) => {
     console.log("¡Recibida petición de RESUMEN!");
     try {
@@ -231,13 +239,16 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
                     proxima_fecha BETWEEN DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
             ) as SubQuery;
         `;
-        
+
+        // Ejecutar ambas consultas en paralelo
         const [resHoy, resProximos] = await Promise.all([
             dbPool.query(sqlHoy),
             dbPool.query(sqlProximos)
         ]);
+
         const countHoy = resHoy[0][0].count;
         const countProximos = resProximos[0][0].count;
+
         res.json({ hoy: countHoy, proximos: countProximos });
 
     } catch (error) {
@@ -245,14 +256,15 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
         res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
-// ---- FIN RUTA RESUMEN ----
+// ---- FIN NUEVO ----
 
 
-// ---- RUTA NUEVA PARA BÚSQUEDA ----
+// ---- NUEVO: RUTA PARA LA BARRA DE BÚSQUEDA ----
 app.get('/api/cumpleaneros/buscar', async (req, res) => {
-    console.log("¡Recibida petición de BÚSQUEDA!");
     try {
         const { nombre } = req.query;
+
+        // Si no hay término de búsqueda, devolvemos un array vacío
         if (!nombre) {
             return res.json([]);
         }
@@ -275,20 +287,33 @@ app.get('/api/cumpleaneros/buscar', async (req, res) => {
         res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
-// ---- FIN RUTA BÚSQUEDA ----
+// ---- FIN NUEVO ----
 
 
-// ---- RUTAS DE PRUEBA (Opcional) ----
-app.get('/api/test-email-hoy', async (req, res) => {
+// ---- RUTAS DE PRUEBA (MODIFICADAS) ----
+
+// Botón de prueba para la alerta de HOY
+app.get('/api/test-email-hoy', (req, res) => { // <-- Se quitó 'async'
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
-    await revisarCumpleanosHoy();
-    res.json({ mensaje: "Prueba de email (HOY) ejecutada." });
+    
+    // 1. Responde al navegador INMEDIATAMENTE
+    res.json({ mensaje: "Prueba de email (HOY) iniciada. Revisa los logs." });
+    
+    // 2. Ejecuta la función de email en segundo plano (sin 'await')
+    revisarCumpleanosHoy(); 
 });
-app.get('/api/test-email-4dias', async (req, res) => {
+
+// Botón de prueba para la alerta de 4 DÍAS
+app.get('/api/test-email-4dias', (req, res) => { // <-- Se quitó 'async'
     console.log("¡¡PRUEBA MANUAL DE EMAIL (4 DÍAS) INICIADA!!");
-    await revisarCumpleanosCuatroDias();
-    res.json({ mensaje: "Prueba de email (4 DÍAS) ejecutada." });
+
+    // 1. Responde al navegador INMEDIATAMENTE
+    res.json({ mensaje: "Prueba de email (4 DÍAS) iniciada. Revisa los logs." });
+
+    // 2. Ejecuta la función de email en segundo plano (sin 'await')
+    revisarCumpleanosCuatroDias();
 });
+
 // ---- FIN DE RUTAS DE PRUEBA ----
 
 
