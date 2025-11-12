@@ -380,6 +380,51 @@ app.get('/api/voluntarios/buscar', async (req, res) => {
 });
 // ---- FIN RUTAS ALERTAS ----
 
+// ---- NUEVO: RUTAS MÓDULO 2: BENEFACTORES ----
+
+// Ruta para cumpleaños de HOY (Benefactores)
+app.get('/api/benefactores/hoy', async (req, res) => {
+    console.log("¡Recibida petición para cumpleaños de benefactores de hoy!");
+    try {
+        const sqlQuery = `
+            SELECT nombre_completo, fecha_nacimiento 
+            FROM benefactores 
+            WHERE 
+                MONTH(fecha_nacimiento) = MONTH(CURDATE()) 
+                AND 
+                DAY(fecha_nacimiento) = DAY(CURDATE());
+        `;
+        const [resultados] = await dbPool.query(sqlQuery);
+        res.json(resultados);
+    } catch (error) {
+        console.error("Error al consultar la base de datos:", error);
+        res.status(500).json({ mensaje: "Error en el servidor" });
+    }
+});
+
+// Ruta para PRÓXIMOS PAGOS (Benefactores)
+// (Buscamos pagos pendientes o vencidos en los próximos 7 días o ya pasados)
+app.get('/api/benefactores/pagos', async (req, res) => {
+    console.log("¡Recibida petición para pagos de benefactores!");
+    try {
+        const sqlQuery = `
+            SELECT nombre_completo, fecha_proximo_pago, estado_pago 
+            FROM benefactores
+            WHERE 
+                (estado_pago = 'Pendiente' OR estado_pago = 'Vencido')
+                AND
+                fecha_proximo_pago <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            ORDER BY
+                fecha_proximo_pago ASC;
+        `;
+        const [resultados] = await dbPool.query(sqlQuery);
+        res.json(resultados);
+    } catch (error) {
+        console.error("Error al consultar pagos:", error);
+        res.status(500).json({ mensaje: "Error en el servidor" });
+    }
+});
+// ---- FIN RUTAS BENEFACTORES ----
 
 // ---- RUTAS DE PRUEBA (Sin cambios) ----
 app.get('/api/test-email-hoy', (req, res) => {
