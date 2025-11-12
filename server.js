@@ -3,17 +3,23 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 
-// ---- Importar las herramientas ----
-require('dotenv').config(); // Carga las variables del .env
+// ---- Herramientas de Email y Cron ----
+require('dotenv').config(); 
 const cron = require('node-cron');
-// ---- YA NO NECESITAMOS NODEMAILER ----
+// ---- FIN ----
+
+// ---- NUEVO: Herramientas de Autenticación ----
+const bcrypt = require('bcryptjs'); // Para encriptar contraseñas
+const jwt = require('jsonwebtoken'); // Para los tokens de sesión
+// ---- FIN ----
+
 
 // 2. Crear la aplicación de Express
 const app = express();
 
 // 3. Usar los "middlewares"
 app.use(cors());
-app.use(express.json()); 
+app.use(express.json()); // Permite a Express leer JSON del body
 
 // 4. Configurar la conexión a la Base de Datos
 const dbPool = mysql.createPool({
@@ -29,7 +35,7 @@ const dbPool = mysql.createPool({
 
 
 // ---- Tareas Programadas (CRON JOBS) ----
-// (Esto se queda igual)
+// (Sin cambios, pero ahora usan la tabla 'voluntarios')
 cron.schedule('0 8 * * *', () => {
     console.log('--- CRON JOB (4 DÍAS): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosCuatroDias();
@@ -46,28 +52,21 @@ cron.schedule('1 8 * * *', () => {
 
 
 // ---- FUNCIÓN GENÉRICA PARA ENVIAR EMAIL (con Brevo) ----
+// (Sin cambios)
 async function enviarEmail(subject, textContent) {
     console.log("Enviando email vía Brevo...");
-
     const url = 'https://api.brevo.com/v3/smtp/email';
-    
-    // Usamos las variables de entorno
-    const apiKey = process.env.EMAIL_PASS; // Clave de Brevo
-    const emailRemitente = process.env.EMAIL_USER; // info@saciar.org.co
+    const apiKey = process.env.EMAIL_PASS;
+    const emailRemitente = process.env.EMAIL_USER;
 
-    // Verificamos que las variables estén cargadas
     if (!apiKey || !emailRemitente) {
-        console.error("Error: EMAIL_PASS o EMAIL_USER no están definidas en las variables de entorno.");
+        console.error("Error: EMAIL_PASS o EMAIL_USER no están definidas.");
         return false;
     }
 
     const body = {
-        sender: {
-            email: emailRemitente // De: info@saciar.org.co
-        },
-        to: [{
-            email: emailRemitente   // Para: info@saciar.org.co
-        }],
+        sender: { email: emailRemitente },
+        to: [{ email: emailRemitente }],
         subject: subject,
         textContent: textContent
     };
@@ -77,22 +76,18 @@ async function enviarEmail(subject, textContent) {
             method: 'POST',
             headers: {
                 'accept': 'application/json',
-                'api-key': apiKey, // Así se autentica Brevo
+                'api-key': apiKey,
                 'content-type': 'application/json'
             },
             body: JSON.stringify(body)
         });
-
         if (!response.ok) {
-            // Si falla, intentamos leer el error que da Brevo
             const errorData = await response.json();
             throw new Error(`Error de Brevo: ${response.status} ${JSON.stringify(errorData)}`);
         }
-
         const data = await response.json();
         console.log(`--- Email enviado con éxito a ${emailRemitente} ---`, data);
         return true;
-
     } catch (error) {
         console.error('Error al enviar email con Brevo:', error);
         return false;
@@ -100,11 +95,12 @@ async function enviarEmail(subject, textContent) {
 }
 
 
-// ---- Funciones de Tareas Programadas (MODIFICADAS) ----
+// ---- Funciones de Tareas Programadas (CORREGIDAS) ----
+// (Ahora leen de la tabla 'voluntarios')
 async function revisarCumpleanosCuatroDias() {
     try {
         const sqlQuery = `
-            SELECT nombre_completo FROM cumpleaneros 
+            SELECT nombre_completo FROM voluntarios 
             WHERE fecha_nacimiento IS NOT NULL
             AND MONTH(fecha_nacimiento) = MONTH(DATE_ADD(CURDATE(), INTERVAL 4 DAY))
             AND DAY(fecha_nacimiento) = DAY(DATE_ADD(CURDATE(), INTERVAL 4 DAY));
@@ -112,15 +108,12 @@ async function revisarCumpleanosCuatroDias() {
         const [resultados] = await dbPool.query(sqlQuery);
 
         if (resultados.length > 0) {
+            // ... (resto de la función sin cambios) ...
             console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
-            
-            const subject = '🔔 Recordatorio de Cumpleaños (en 4 días)';
+            const subject = '🔔 Alerta de Próximos Cumpleaños (en 4 días)';
             const textContent = `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`;
-
-            
             await enviarEmail(subject, textContent);
-
         } else {
             console.log('--- No se encontraron cumpleaños en 4 días. No se envía email. ---');
         }
@@ -132,7 +125,7 @@ async function revisarCumpleanosCuatroDias() {
 async function revisarCumpleanosHoy() {
     try {
         const sqlQuery = `
-            SELECT nombre_completo FROM cumpleaneros 
+            SELECT nombre_completo FROM voluntarios 
             WHERE fecha_nacimiento IS NOT NULL
             AND MONTH(fecha_nacimiento) = MONTH(CURDATE())
             AND DAY(fecha_nacimiento) = DAY(CURDATE());
@@ -140,15 +133,12 @@ async function revisarCumpleanosHoy() {
         const [resultados] = await dbPool.query(sqlQuery);
 
         if (resultados.length > 0) {
+            // ... (resto de la función sin cambios) ...
             console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
-            
-            const subject = '🎂 Recordatorio Felicitación a Voluntarios)';
-            const textContent = `¡Hola! \n\nEstas son las personas cumplen años el día de HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
-
-
+            const subject = '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)';
+            const textContent = `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
             await enviarEmail(subject, textContent);
-
         } else {
             console.log('--- No se encontraron cumpleaños (HOY). No se envía email. ---');
         }
@@ -159,14 +149,107 @@ async function revisarCumpleanosHoy() {
 // ---- FIN FUNCIONES CRON ----
 
 
-// 5. TUS RUTAS API (Endpoints)
-// (No cambian)
-app.get('/api/cumpleaneros/hoy', async (req, res) => {
-    console.log("¡Recibida petición para cumpleaños de hoy!");
+// 5. RUTAS API (Endpoints)
+// -----------------------------------------------------------------
+
+// ---- NUEVO: RUTAS DE AUTENTICACIÓN (LOGIN) ----
+
+// Ruta para REGISTRAR un nuevo usuario
+// (La usaremos para crear nuestro primer admin)
+app.post('/api/auth/register', async (req, res) => {
+    try {
+        const { email, password, nombre_completo, rol } = req.body;
+
+        // Validar inputs
+        if (!email || !password || !rol) {
+            return res.status(400).json({ mensaje: "Email, contraseña y rol son requeridos." });
+        }
+
+        // 1. Hashear la contraseña
+        const salt = await bcrypt.genSalt(10);
+        const password_hash = await bcrypt.hash(password, salt);
+
+        // 2. Guardar en la base de datos
+        const sqlQuery = `
+            INSERT INTO usuarios (email, password_hash, nombre_completo, rol) 
+            VALUES (?, ?, ?, ?)
+        `;
+        await dbPool.query(sqlQuery, [email, password_hash, nombre_completo, rol]);
+
+        res.status(201).json({ mensaje: `Usuario ${email} registrado con éxito.` });
+        console.log(`Usuario ${email} registrado con éxito.`);
+
+    } catch (error) {
+        console.error("Error al registrar usuario:", error);
+        // Manejar error de email duplicado
+        if (error.code === 'ER_DUP_ENTRY') {
+            return res.status(400).json({ mensaje: "Este email ya está registrado." });
+        }
+        res.status(500).json({ mensaje: "Error en el servidor al registrar." });
+    }
+});
+
+// Ruta para INICIAR SESIÓN (Login)
+app.post('/api/auth/login', async (req, res) => {
+    try {
+        const { email, password } = req.body;
+
+        // 1. Buscar al usuario por email
+        const sqlQuery = "SELECT * FROM usuarios WHERE email = ?";
+        const [usuarios] = await dbPool.query(sqlQuery, [email]);
+
+        const usuario = usuarios[0];
+        if (!usuario) {
+            return res.status(400).json({ mensaje: "Credenciales incorrectas (email)." });
+        }
+
+        // 2. Comparar la contraseña
+        const passwordValida = await bcrypt.compare(password, usuario.password_hash);
+        if (!passwordValida) {
+            return res.status(400).json({ mensaje: "Credenciales incorrectas (contraseña)." });
+        }
+
+        // 3. Crear el Token (JWT)
+        const payload = {
+            id: usuario.id,
+            email: usuario.email,
+            rol: usuario.rol
+        };
+        const token = jwt.sign(
+            payload, 
+            process.env.JWT_SECRET, // Usa la clave secreta de Render
+            { expiresIn: '1d' } // El token expira en 1 día
+        );
+
+        // 4. Enviar el token al frontend
+        res.json({
+            mensaje: "Login exitoso",
+            token: token,
+            usuario: {
+                nombre: usuario.nombre_completo,
+                rol: usuario.rol
+            }
+        });
+        console.log(`Login exitoso para ${usuario.email}`);
+
+    } catch (error) {
+        console.error("Error en el login:", error);
+        res.status(500).json({ mensaje: "Error en el servidor al iniciar sesión." });
+    }
+});
+// ---- FIN RUTAS AUTENTICACIÓN ----
+
+
+// ---- RUTAS DE ALERTAS (CORREGIDAS con 'voluntarios') ----
+// (El prefijo cambió de '/api/cumpleaneros' a '/api/voluntarios')
+
+// Ruta para cumpleaños de HOY (Voluntarios)
+app.get('/api/voluntarios/hoy', async (req, res) => {
+    console.log("¡Recibida petición para cumpleaños de voluntarios de hoy!");
     try {
         const sqlQuery = `
             SELECT nombre_completo, fecha_nacimiento 
-            FROM cumpleaneros 
+            FROM voluntarios 
             WHERE 
                 MONTH(fecha_nacimiento) = MONTH(CURDATE()) 
                 AND 
@@ -180,8 +263,9 @@ app.get('/api/cumpleaneros/hoy', async (req, res) => {
     }
 });
 
-app.get('/api/cumpleaneros/proximos', async (req, res) => {
-    console.log("¡Recibida petición para próximos cumpleaños!");
+// Ruta para los PRÓXIMOS 7 DÍAS (Voluntarios)
+app.get('/api/voluntarios/proximos', async (req, res) => {
+    console.log("¡Recibida petición para próximos cumpleaños de voluntarios!");
     try {
         const sqlQuery = `
             WITH CumpleanosProximos AS (
@@ -193,7 +277,7 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
                         INTERVAL DAYOFYEAR(fecha_nacimiento) - 1 DAY
                     ) AS cumple_este_ano
                 FROM 
-                    cumpleaneros
+                    voluntarios
                 WHERE 
                     fecha_nacimiento IS NOT NULL
             )
@@ -220,12 +304,13 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
     }
 });
 
-app.get('/api/cumpleaneros/resumen', async (req, res) => {
-    console.log("¡Recibida petición de RESUMEN!");
+// Ruta para RESUMEN (Voluntarios)
+app.get('/api/voluntarios/resumen', async (req, res) => {
+    console.log("¡Recibida petición de RESUMEN de voluntarios!");
     try {
         const sqlHoy = `
             SELECT COUNT(*) as count 
-            FROM cumpleaneros 
+            FROM voluntarios 
             WHERE 
                 MONTH(fecha_nacimiento) = MONTH(CURDATE()) 
                 AND 
@@ -241,7 +326,7 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
                             INTERVAL DAYOFYEAR(fecha_nacimiento) - 1 DAY
                         ) AS cumple_este_ano
                     FROM 
-                        cumpleaneros
+                        voluntarios
                     WHERE 
                         fecha_nacimiento IS NOT NULL
                 )
@@ -270,7 +355,8 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
     }
 });
 
-app.get('/api/cumpleaneros/buscar', async (req, res) => {
+// Ruta para BÚSQUEDA (Voluntarios)
+app.get('/api/voluntarios/buscar', async (req, res) => {
     try {
         const { nombre } = req.query;
         if (!nombre) {
@@ -279,7 +365,7 @@ app.get('/api/cumpleaneros/buscar', async (req, res) => {
         const searchTerm = `%${nombre}%`;
         const sqlQuery = `
             SELECT nombre_completo, fecha_nacimiento 
-            FROM cumpleaneros 
+            FROM voluntarios 
             WHERE nombre_completo LIKE ? 
             ORDER BY nombre_completo ASC
             LIMIT 50;
@@ -292,19 +378,18 @@ app.get('/api/cumpleaneros/buscar', async (req, res) => {
         res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
+// ---- FIN RUTAS ALERTAS ----
 
 
-// ---- RUTAS DE PRUEBA (Para probar el envío de correos) ----
+// ---- RUTAS DE PRUEBA (Sin cambios) ----
 app.get('/api/test-email-hoy', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
     res.json({ mensaje: "Prueba de email (HOY) iniciada. Revisa los logs." });
-    // Ejecuta la función de email en segundo plano
     revisarCumpleanosHoy(); 
 });
 app.get('/api/test-email-4dias', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (4 DÍAS) INICIADA!!");
     res.json({ mensaje: "Prueba de email (4 DÍAS) iniciada. Revisa los logs." });
-    // Ejecuta la función de email en segundo plano
     revisarCumpleanosCuatroDias();
 });
 // ---- FIN DE RUTAS DE PRUEBA ----
