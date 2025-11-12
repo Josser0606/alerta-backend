@@ -28,9 +28,6 @@ const dbPool = mysql.createPool({
 }).promise();
 
 
-// ---- YA NO NECESITAMOS CONFIGURAR EL "TRANSPORTER" ----
-
-
 // ---- Tareas Programadas (CRON JOBS) ----
 // (Esto se queda igual)
 cron.schedule('0 8 * * *', () => {
@@ -48,15 +45,15 @@ cron.schedule('1 8 * * *', () => {
 // ---- FIN ----
 
 
-// ---- NUEVA FUNCIÓN GENÉRICA PARA ENVIAR EMAIL (con Brevo) ----
+// ---- FUNCIÓN GENÉRICA PARA ENVIAR EMAIL (con Brevo) ----
 async function enviarEmail(subject, textContent) {
     console.log("Enviando email vía Brevo...");
 
     const url = 'https://api.brevo.com/v3/smtp/email';
     
     // Usamos las variables de entorno
-    const apiKey = process.env.EMAIL_PASS; // ¡Esta es ahora la clave de Brevo!
-    const emailRemitente = process.env.EMAIL_USER;
+    const apiKey = process.env.EMAIL_PASS; // Clave de Brevo
+    const emailRemitente = process.env.EMAIL_USER; // info@saciar.org.co
 
     // Verificamos que las variables estén cargadas
     if (!apiKey || !emailRemitente) {
@@ -66,10 +63,10 @@ async function enviarEmail(subject, textContent) {
 
     const body = {
         sender: {
-            email: emailRemitente
+            email: emailRemitente // De: info@saciar.org.co
         },
         to: [{
-            email: emailRemitente // Nos lo auto-enviamos
+            email: emailRemitente   // Para: info@saciar.org.co
         }],
         subject: subject,
         textContent: textContent
@@ -93,7 +90,7 @@ async function enviarEmail(subject, textContent) {
         }
 
         const data = await response.json();
-        console.log('--- Email enviado con éxito vía Brevo ---', data);
+        console.log(`--- Email enviado con éxito a ${emailRemitente} ---`, data);
         return true;
 
     } catch (error) {
@@ -120,8 +117,8 @@ async function revisarCumpleanosCuatroDias() {
             
             const subject = '🔔 Recordatorio de Cumpleaños (en 4 días)';
             const textContent = `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`;
+
             
-            // Llamamos a nuestra nueva función
             await enviarEmail(subject, textContent);
 
         } else {
@@ -149,7 +146,7 @@ async function revisarCumpleanosHoy() {
             const subject = '🎂 Recordatorio Felicitación a Voluntarios)';
             const textContent = `¡Hola! \n\nEstas son las personas cumplen años el día de HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
 
-            // Llamamos a nuestra nueva función
+
             await enviarEmail(subject, textContent);
 
         } else {
@@ -297,7 +294,7 @@ app.get('/api/cumpleaneros/buscar', async (req, res) => {
 });
 
 
-// ---- RUTAS DE PRUEBA (Están bien como las dejamos) ----
+// ---- RUTAS DE PRUEBA (Para probar el envío de correos) ----
 app.get('/api/test-email-hoy', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
     res.json({ mensaje: "Prueba de email (HOY) iniciada. Revisa los logs." });
