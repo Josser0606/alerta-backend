@@ -426,6 +426,46 @@ app.get('/api/benefactores/pagos', async (req, res) => {
 });
 // ---- FIN RUTAS BENEFACTORES ----
 
+// ---- NUEVO: RUTAS MÓDULO 3: TRANSPORTE ----
+
+// Ruta para VENCIMIENTOS PRÓXIMOS (SOAT, Tecno, Licencia)
+// Busca vencimientos en los próximos 30 días
+app.get('/api/transporte/vencimientos', async (req, res) => {
+    console.log("¡Recibida petición para vencimientos de transporte!");
+    try {
+        const sqlQuery = `
+            SELECT
+                placa,
+                descripcion,
+                conductor_asignado,
+                fecha_vencimiento_soat,
+                fecha_vencimiento_tecnomecanica,
+                fecha_vencimiento_licencia
+            FROM 
+                vehiculos
+            WHERE
+                (fecha_vencimiento_soat BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+            OR
+                (fecha_vencimiento_tecnomecanica BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+            OR
+                (fecha_vencimiento_licencia BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY))
+            ORDER BY
+                -- Ordena por la fecha más cercana a vencer primero
+                LEAST(
+                    IFNULL(fecha_vencimiento_soat, '9999-12-31'), 
+                    IFNULL(fecha_vencimiento_tecnomecanica, '9999-12-31'),
+                    IFNULL(fecha_vencimiento_licencia, '9999-12-31')
+                ) ASC;
+        `;
+        const [resultados] = await dbPool.query(sqlQuery);
+        res.json(resultados);
+    } catch (error) {
+        console.error("Error al consultar vencimientos de transporte:", error);
+        res.status(500).json({ mensaje: "Error en el servidor" });
+    }
+});
+// ---- FIN RUTAS TRANSPORTE ----
+
 // ---- RUTAS DE PRUEBA (Sin cambios) ----
 app.get('/api/test-email-hoy', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
