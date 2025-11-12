@@ -118,7 +118,7 @@ async function revisarCumpleanosCuatroDias() {
             console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
             
-            const subject = '🔔 Alerta de PróximOS Cumpleaños (en 4 días)';
+            const subject = '🔔 Recordatorio de Cumpleaños (en 4 días)';
             const textContent = `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`;
             
             // Llamamos a nuestra nueva función
@@ -146,8 +146,8 @@ async function revisarCumpleanosHoy() {
             console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
             
-            const subject = '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)';
-            const textContent = `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
+            const subject = '🎂 Recordatorio Felicitación a Voluntarios)';
+            const textContent = `¡Hola! \n\nEstas son las personas cumplen años el día de HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
 
             // Llamamos a nuestra nueva función
             await enviarEmail(subject, textContent);
