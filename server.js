@@ -3,11 +3,10 @@ const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
 
-// ---- Importar las herramientas para email y cron ----
+// ---- Importar las herramientas ----
 require('dotenv').config(); // Carga las variables del .env
-const nodemailer = require('nodemailer');
 const cron = require('node-cron');
-// ---- FIN ----
+// ---- YA NO NECESITAMOS NODEMAILER ----
 
 // 2. Crear la aplicación de Express
 const app = express();
@@ -29,34 +28,17 @@ const dbPool = mysql.createPool({
 }).promise();
 
 
-// ---- Configurar el "Transportador" de Email (MODIFICADO) ----
-// En lugar de 'service: "gmail"', usamos la config explícita
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com', // Host de Gmail
-    port: 587,              // Puerto TLS (más común)
-    secure: false,          // false para TLS
-    auth: {
-        user: process.env.EMAIL_USER, // Tu correo (del .env)
-        pass: process.env.EMAIL_PASS  // Tu "Contraseña de Aplicación" de 16 letras
-    },
-    tls: {
-        rejectUnauthorized: false // A veces necesario en servidores en la nube
-    }
-});
-// ---- FIN ----
+// ---- YA NO NECESITAMOS CONFIGURAR EL "TRANSPORTER" ----
 
 
 // ---- Tareas Programadas (CRON JOBS) ----
-
-// TAREA 1 (Existente): Aviso de 4 días antes
+// (Esto se queda igual)
 cron.schedule('0 8 * * *', () => {
     console.log('--- CRON JOB (4 DÍAS): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosCuatroDias();
 }, {
     timezone: "America/Bogota"
 });
-
-// TAREA 2 (HOY)
 cron.schedule('1 8 * * *', () => {
     console.log('--- CRON JOB (HOY): Ejecutando revisión de cumpleaños ---');
     revisarCumpleanosHoy();
@@ -66,34 +48,82 @@ cron.schedule('1 8 * * *', () => {
 // ---- FIN ----
 
 
-// Función para la Tarea 1 (4 días)
+// ---- NUEVA FUNCIÓN GENÉRICA PARA ENVIAR EMAIL (con Brevo) ----
+async function enviarEmail(subject, textContent) {
+    console.log("Enviando email vía Brevo...");
+
+    const url = 'https://api.brevo.com/v3/smtp/email';
+    
+    // Usamos las variables de entorno
+    const apiKey = process.env.EMAIL_PASS; // ¡Esta es ahora la clave de Brevo!
+    const emailRemitente = process.env.EMAIL_USER;
+
+    // Verificamos que las variables estén cargadas
+    if (!apiKey || !emailRemitente) {
+        console.error("Error: EMAIL_PASS o EMAIL_USER no están definidas en las variables de entorno.");
+        return false;
+    }
+
+    const body = {
+        sender: {
+            email: emailRemitente
+        },
+        to: [{
+            email: emailRemitente // Nos lo auto-enviamos
+        }],
+        subject: subject,
+        textContent: textContent
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'accept': 'application/json',
+                'api-key': apiKey, // Así se autentica Brevo
+                'content-type': 'application/json'
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!response.ok) {
+            // Si falla, intentamos leer el error que da Brevo
+            const errorData = await response.json();
+            throw new Error(`Error de Brevo: ${response.status} ${JSON.stringify(errorData)}`);
+        }
+
+        const data = await response.json();
+        console.log('--- Email enviado con éxito vía Brevo ---', data);
+        return true;
+
+    } catch (error) {
+        console.error('Error al enviar email con Brevo:', error);
+        return false;
+    }
+}
+
+
+// ---- Funciones de Tareas Programadas (MODIFICADAS) ----
 async function revisarCumpleanosCuatroDias() {
     try {
         const sqlQuery = `
-            SELECT nombre_completo 
-            FROM cumpleaneros 
-            WHERE 
-                fecha_nacimiento IS NOT NULL
-                AND
-                MONTH(fecha_nacimiento) = MONTH(DATE_ADD(CURDATE(), INTERVAL 4 DAY))
-                AND 
-                DAY(fecha_nacimiento) = DAY(DATE_ADD(CURDATE(), INTERVAL 4 DAY));
+            SELECT nombre_completo FROM cumpleaneros 
+            WHERE fecha_nacimiento IS NOT NULL
+            AND MONTH(fecha_nacimiento) = MONTH(DATE_ADD(CURDATE(), INTERVAL 4 DAY))
+            AND DAY(fecha_nacimiento) = DAY(DATE_ADD(CURDATE(), INTERVAL 4 DAY));
         `;
         const [resultados] = await dbPool.query(sqlQuery);
 
         if (resultados.length > 0) {
-            console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)! Enviando email...`);
+            console.log(`¡Encontrados ${resultados.length} cumpleaños (en 4 días)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
             
-            const mailOptions = {
-                from: process.env.EMAIL_USER,
-                to: process.env.EMAIL_USER,   
-                subject: '🔔 Alerta de Próximos Cumpleaños (en 4 días)',
-                text: `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`
-            };
+            const subject = '🔔 Alerta de PróximOS Cumpleaños (en 4 días)';
+            const textContent = `¡Hola! \n\nEstas personas cumplen años en 4 días:\n\n${listaNombres}\n\nQue tengas un buen día.`;
+            
+            // Llamamos a nuestra nueva función
+            await enviarEmail(subject, textContent);
 
-            await transporter.sendMail(mailOptions);
-            console.log('--- Email de alerta (4 días) enviado con éxito ---');
         } else {
             console.log('--- No se encontraron cumpleaños en 4 días. No se envía email. ---');
         }
@@ -102,34 +132,26 @@ async function revisarCumpleanosCuatroDias() {
     }
 }
 
-// Función para la Tarea 2 (HOY)
 async function revisarCumpleanosHoy() {
     try {
         const sqlQuery = `
-            SELECT nombre_completo 
-            FROM cumpleaneros 
-            WHERE 
-                fecha_nacimiento IS NOT NULL
-                AND
-                MONTH(fecha_nacimiento) = MONTH(CURDATE())
-                AND 
-                DAY(fecha_nacimiento) = DAY(CURDATE());
+            SELECT nombre_completo FROM cumpleaneros 
+            WHERE fecha_nacimiento IS NOT NULL
+            AND MONTH(fecha_nacimiento) = MONTH(CURDATE())
+            AND DAY(fecha_nacimiento) = DAY(CURDATE());
         `;
         const [resultados] = await dbPool.query(sqlQuery);
 
         if (resultados.length > 0) {
-            console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)! Enviando email...`);
+            console.log(`¡Encontrados ${resultados.length} cumpleaños (HOY)!`);
             const listaNombres = resultados.map(p => `- ${p.nombre_completo}`).join('\n');
             
-            const mailOptions = {
-                from: process.env.EMAIL_USER,
-                to: process.env.EMAIL_USER,   
-                subject: '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)',
-                text: `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`
-            };
+            const subject = '🎂 ¡Feliz Cumpleaños! (Alertas Fundación)';
+            const textContent = `¡Hola! \n\nEstas personas cumplen años HOY:\n\n${listaNombres}\n\n¡No olvides felicitarlas!`;
 
-            await transporter.sendMail(mailOptions);
-            console.log('--- Email de alerta (HOY) enviado con éxito ---');
+            // Llamamos a nuestra nueva función
+            await enviarEmail(subject, textContent);
+
         } else {
             console.log('--- No se encontraron cumpleaños (HOY). No se envía email. ---');
         }
@@ -141,9 +163,7 @@ async function revisarCumpleanosHoy() {
 
 
 // 5. TUS RUTAS API (Endpoints)
-// -----------------------------------------------------------------
-
-// Ruta para cumpleaños de HOY (Existente, para la tarjeta)
+// (No cambian)
 app.get('/api/cumpleaneros/hoy', async (req, res) => {
     console.log("¡Recibida petición para cumpleaños de hoy!");
     try {
@@ -163,7 +183,6 @@ app.get('/api/cumpleaneros/hoy', async (req, res) => {
     }
 });
 
-// Ruta para los PRÓXIMOS 7 DÍAS (Existente, para la tarjeta)
 app.get('/api/cumpleaneros/proximos', async (req, res) => {
     console.log("¡Recibida petición para próximos cumpleaños!");
     try {
@@ -204,11 +223,9 @@ app.get('/api/cumpleaneros/proximos', async (req, res) => {
     }
 });
 
-// ---- NUEVO: RUTA PARA EL PANEL DE NOTIFICACIONES (RESUMEN) ----
 app.get('/api/cumpleaneros/resumen', async (req, res) => {
     console.log("¡Recibida petición de RESUMEN!");
     try {
-        // Query 1: Conteo de HOY
         const sqlHoy = `
             SELECT COUNT(*) as count 
             FROM cumpleaneros 
@@ -217,8 +234,6 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
                 AND 
                 DAY(fecha_nacimiento) = DAY(CURDATE());
         `;
-
-        // Query 2: Conteo de PRÓXIMOS 7 DÍAS
         const sqlProximos = `
             SELECT COUNT(*) as count FROM (
                 WITH CumpleanosProximos AS (
@@ -245,36 +260,25 @@ app.get('/api/cumpleaneros/resumen', async (req, res) => {
                     proxima_fecha BETWEEN DATE_ADD(CURDATE(), INTERVAL 1 DAY) AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
             ) as SubQuery;
         `;
-
-        // Ejecutar ambas consultas en paralelo
         const [resHoy, resProximos] = await Promise.all([
             dbPool.query(sqlHoy),
             dbPool.query(sqlProximos)
         ]);
-
         const countHoy = resHoy[0][0].count;
         const countProximos = resProximos[0][0].count;
-
         res.json({ hoy: countHoy, proximos: countProximos });
-
     } catch (error) {
         console.error("Error al consultar el resumen:", error);
         res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
-// ---- FIN NUEVO ----
 
-
-// ---- NUEVO: RUTA PARA LA BARRA DE BÚSQUEDA ----
 app.get('/api/cumpleaneros/buscar', async (req, res) => {
     try {
         const { nombre } = req.query;
-
-        // Si no hay término de búsqueda, devolvemos un array vacío
         if (!nombre) {
             return res.json([]);
         }
-
         const searchTerm = `%${nombre}%`;
         const sqlQuery = `
             SELECT nombre_completo, fecha_nacimiento 
@@ -283,43 +287,29 @@ app.get('/api/cumpleaneros/buscar', async (req, res) => {
             ORDER BY nombre_completo ASC
             LIMIT 50;
         `;
-        
         const [resultados] = await dbPool.query(sqlQuery, [searchTerm]);
         console.log(`Búsqueda de '${nombre}' devolvió ${resultados.length} resultados.`);
         res.json(resultados);
-
     } catch (error) {
         console.error("Error en la búsqueda:", error);
         res.status(500).json({ mensaje: "Error en el servidor" });
     }
 });
-// ---- FIN NUEVO ----
 
 
-// ---- RUTAS DE PRUEBA (MODIFICADAS) ----
-
-// Botón de prueba para la alerta de HOY
-app.get('/api/test-email-hoy', (req, res) => { // <-- Se quitó 'async'
+// ---- RUTAS DE PRUEBA (Están bien como las dejamos) ----
+app.get('/api/test-email-hoy', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
-    
-    // 1. Responde al navegador INMEDIATAMENTE
     res.json({ mensaje: "Prueba de email (HOY) iniciada. Revisa los logs." });
-    
-    // 2. Ejecuta la función de email en segundo plano (sin 'await')
+    // Ejecuta la función de email en segundo plano
     revisarCumpleanosHoy(); 
 });
-
-// Botón de prueba para la alerta de 4 DÍAS
-app.get('/api/test-email-4dias', (req, res) => { // <-- Se quitó 'async'
+app.get('/api/test-email-4dias', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (4 DÍAS) INICIADA!!");
-
-    // 1. Responde al navegador INMEDIATAMENTE
     res.json({ mensaje: "Prueba de email (4 DÍAS) iniciada. Revisa los logs." });
-
-    // 2. Ejecuta la función de email en segundo plano (sin 'await')
+    // Ejecuta la función de email en segundo plano
     revisarCumpleanosCuatroDias();
 });
-
 // ---- FIN DE RUTAS DE PRUEBA ----
 
 
