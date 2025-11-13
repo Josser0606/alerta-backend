@@ -380,32 +380,29 @@ app.get('/api/voluntarios/buscar', async (req, res) => {
 });
 // ---- FIN RUTAS ALERTAS ----
 
-// ---- NUEVO: RUTAS MÓDULO 2: BENEFACTORES ----
+// ---- RUTAS MÓDULO 2: BENEFACTORES (ACTUALIZADAS) ----
 
-// Ruta para cumpleaños de HOY (Benefactores)
+// 1. Cumpleaños de Benefactores (Ojo: cambió el nombre de la columna a 'fecha_fundacion_o_cumpleanos')
 app.get('/api/benefactores/hoy', async (req, res) => {
-    console.log("¡Recibida petición para cumpleaños de benefactores de hoy!");
     try {
         const sqlQuery = `
-            SELECT nombre_completo, fecha_nacimiento 
+            SELECT nombre_completo, fecha_fundacion_o_cumpleanos as fecha_nacimiento 
             FROM benefactores 
             WHERE 
-                MONTH(fecha_nacimiento) = MONTH(CURDATE()) 
+                MONTH(fecha_fundacion_o_cumpleanos) = MONTH(CURDATE()) 
                 AND 
-                DAY(fecha_nacimiento) = DAY(CURDATE());
+                DAY(fecha_fundacion_o_cumpleanos) = DAY(CURDATE());
         `;
         const [resultados] = await dbPool.query(sqlQuery);
         res.json(resultados);
     } catch (error) {
-        console.error("Error al consultar la base de datos:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        console.error("Error benefactores hoy:", error);
+        res.status(500).json({ mensaje: "Error servidor" });
     }
 });
 
-// Ruta para PRÓXIMOS PAGOS (Benefactores)
-// (Buscamos pagos pendientes o vencidos en los próximos 7 días o ya pasados)
+// 2. Próximos Pagos
 app.get('/api/benefactores/pagos', async (req, res) => {
-    console.log("¡Recibida petición para pagos de benefactores!");
     try {
         const sqlQuery = `
             SELECT nombre_completo, fecha_proximo_pago, estado_pago 
@@ -420,8 +417,72 @@ app.get('/api/benefactores/pagos', async (req, res) => {
         const [resultados] = await dbPool.query(sqlQuery);
         res.json(resultados);
     } catch (error) {
-        console.error("Error al consultar pagos:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        console.error("Error benefactores pagos:", error);
+        res.status(500).json({ mensaje: "Error servidor" });
+    }
+});
+
+// 3. NUEVO: CREAR BENEFACTOR (Formulario de 28 puntos)
+app.post('/api/benefactores/nuevo', async (req, res) => {
+    console.log("¡Recibiendo nuevo benefactor!");
+    
+    // Usamos una 'conexión' en lugar del 'pool' directamente para poder usar transacciones (opcional, pero recomendado)
+    // Por simplicidad, usaremos ejecuciones secuenciales con el pool.
+    
+    try {
+        const body = req.body;
+
+        // 1. Insertar en la tabla 'benefactores'
+        const sqlBenefactor = `
+            INSERT INTO benefactores (
+                cod_1_tipo, naturaleza, tipo_documento, numero_documento, nombre_completo,
+                nombre_contactado, tipo_contacto, numero_contacto, correo, fecha_fundacion_o_cumpleanos,
+                direccion, departamento, ciudad, empresa, cargo, estado_civil, conyuge,
+                protocolo, contacto_saciar, estado, autorizacion_datos, fecha_rut_actualizado,
+                certificado_donacion, certificado_donacion_detalle, fecha_actualizacion_clinton,
+                antecedentes_judiciales, encuesta_satisfaccion,
+                estado_pago, fecha_proximo_pago
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const valoresBenefactor = [
+            body.cod_1_tipo, body.naturaleza, body.tipo_documento, body.numero_documento, body.nombre_completo,
+            body.nombre_contactado, body.tipo_contacto, body.numero_contacto, body.correo, body.fecha_fundacion_o_cumpleanos || null,
+            body.direccion, body.departamento, body.ciudad, body.empresa, body.cargo, body.estado_civil, body.conyuge,
+            body.protocolo, body.contacto_saciar, body.estado, body.autorizacion_datos, body.fecha_rut_actualizado,
+            body.certificado_donacion, body.certificado_donacion_detalle, body.fecha_actualizacion_clinton || null,
+            body.antecedentes_judiciales, body.encuesta_satisfaccion,
+            'Pendiente', null // Valores por defecto para pagos
+        ];
+
+        const [resultBenefactor] = await dbPool.query(sqlBenefactor, valoresBenefactor);
+        const nuevoId = resultBenefactor.insertId; // ID del nuevo benefactor
+
+        // 2. Insertar en la tabla 'donaciones'
+        const sqlDonacion = `
+            INSERT INTO donaciones (
+                benefactor_id, tipo_donacion, procedencia, procedencia_2, detalles_donacion,
+                fecha_donacion, observaciones
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const valoresDonacion = [
+            nuevoId,
+            body.tipo_donacion,
+            body.procedencia,
+            body.procedencia_2 || '', // Campo opcional
+            body.detalles_donacion,
+            body.fecha_donacion,
+            body.observaciones
+        ];
+
+        await dbPool.query(sqlDonacion, valoresDonacion);
+
+        res.status(201).json({ mensaje: "Benefactor y donación creados con éxito", id: nuevoId });
+
+    } catch (error) {
+        console.error("Error al crear benefactor:", error);
+        res.status(500).json({ mensaje: "Error al guardar en la base de datos", error: error.message });
     }
 });
 // ---- FIN RUTAS BENEFACTORES ----
