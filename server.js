@@ -574,6 +574,18 @@ app.get('/api/test-email-4dias', (req, res) => {
 });
 // ---- FIN DE RUTAS DE PRUEBA ----
 
+// ---- NUEVA RUTA: OBTENER TODOS LOS BENEFACTORES ----
+app.get('/api/benefactores/todos', async (req, res) => {
+    try {
+        // Seleccionamos todo y ordenamos alfabéticamente
+        const sqlQuery = `SELECT * FROM benefactores ORDER BY nombre_benefactor ASC`;
+        const [resultados] = await dbPool.query(sqlQuery);
+        res.json(resultados);
+    } catch (error) {
+        console.error("Error al obtener lista completa:", error);
+        res.status(500).json({ mensaje: "Error al obtener la lista" });
+    }
+});
 
 // 6. Iniciar el servidor
 const PORT = process.env.PORT || 3001;
