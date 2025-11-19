@@ -91,46 +91,39 @@ async function enviarEmail(subject, textContent) {
 
 
 // ---- Funciones de Tareas Programadas (CRON JOBS) ----
+// NOTA: Se añade el parámetro 'campoNombre' para manejar la diferencia entre tablas.
 
-// TAREA 1: Voluntarios (4 días)
+// TAREA 1: Voluntarios (4 días) -> Usa 'nombre_completo'
 cron.schedule('0 8 * * *', () => {
     console.log('--- CRON JOB (Voluntarios 4 DÍAS): Ejecutando revisión de cumpleaños ---');
-    revisarCumpleanosCuatroDias('voluntarios', 'fecha_nacimiento', '🔔 Alerta: Próximos Cumpleaños de Voluntarios (en 4 días)');
-}, {
-    timezone: "America/Bogota"
-});
+    revisarCumpleanosCuatroDias('voluntarios', 'fecha_nacimiento', '🔔 Alerta: Próximos Cumpleaños de Voluntarios (en 4 días)', 'nombre_completo');
+}, { timezone: "America/Bogota" });
 
-// TAREA 2: Voluntarios (HOY)
+// TAREA 2: Voluntarios (HOY) -> Usa 'nombre_completo'
 cron.schedule('1 8 * * *', () => {
     console.log('--- CRON JOB (Voluntarios HOY): Ejecutando revisión de cumpleaños ---');
-    revisarCumpleanosHoy('voluntarios', 'fecha_nacimiento', '🎂 ¡Feliz Cumpleaños Voluntario! (Alertas Fundación)');
-}, {
-    timezone: "America/Bogota"
-});
+    revisarCumpleanosHoy('voluntarios', 'fecha_nacimiento', '🎂 ¡Feliz Cumpleaños Voluntario! (Alertas Fundación)', 'nombre_completo');
+}, { timezone: "America/Bogota" });
 
-// TAREA 3: Benefactores (4 días)
+// TAREA 3: Benefactores (4 días) -> CORREGIDO: Usa 'nombre_benefactor'
 cron.schedule('2 8 * * *', () => {
     console.log('--- CRON JOB (Benefactores 4 DÍAS): Ejecutando revisión de cumpleaños ---');
-    revisarCumpleanosCuatroDias('benefactores', 'fecha_fundacion_o_cumpleanos', '🔔 Alerta: Próximos Cumpleaños de Benefactores (en 4 días)');
-}, {
-    timezone: "America/Bogota"
-});
+    revisarCumpleanosCuatroDias('benefactores', 'fecha_fundacion_o_cumpleanos', '🔔 Alerta: Próximos Cumpleaños de Benefactores (en 4 días)', 'nombre_benefactor');
+}, { timezone: "America/Bogota" });
 
-// TAREA 4: Benefactores (HOY)
+// TAREA 4: Benefactores (HOY) -> CORREGIDO: Usa 'nombre_benefactor'
 cron.schedule('3 8 * * *', () => {
     console.log('--- CRON JOB (Benefactores HOY): Ejecutando revisión de cumpleaños ---');
-    revisarCumpleanosHoy('benefactores', 'fecha_fundacion_o_cumpleanos', '🎂 ¡Feliz Cumpleaños Benefactor! (Alertas Fundación)');
-}, {
-    timezone: "America/Bogota"
-});
+    revisarCumpleanosHoy('benefactores', 'fecha_fundacion_o_cumpleanos', '🎂 ¡Feliz Cumpleaños Benefactor! (Alertas Fundación)', 'nombre_benefactor');
+}, { timezone: "America/Bogota" });
 
 // ---- Funciones Genéricas de CRON ----
 
-async function revisarCumpleanosCuatroDias(tabla, campoFecha, emailSubject) {
+async function revisarCumpleanosCuatroDias(tabla, campoFecha, emailSubject, campoNombre = 'nombre_completo') {
     try {
-        // CORRECCIÓN: Se usa ?? para manejar NULLs en las columnas de fecha
+        // Usamos un ALIAS (AS nombre_completo) para unificar el resultado
         const sqlQuery = `
-            SELECT nombre_completo 
+            SELECT ${mysql.escapeId(campoNombre)} AS nombre_completo
             FROM ${mysql.escapeId(tabla)} 
             WHERE 
                 ${mysql.escapeId(campoFecha)} IS NOT NULL
@@ -154,10 +147,10 @@ async function revisarCumpleanosCuatroDias(tabla, campoFecha, emailSubject) {
     }
 }
 
-async function revisarCumpleanosHoy(tabla, campoFecha, emailSubject) {
+async function revisarCumpleanosHoy(tabla, campoFecha, emailSubject, campoNombre = 'nombre_completo') {
     try {
         const sqlQuery = `
-            SELECT nombre_completo 
+            SELECT ${mysql.escapeId(campoNombre)} AS nombre_completo
             FROM ${mysql.escapeId(tabla)} 
             WHERE 
                 ${mysql.escapeId(campoFecha)} IS NOT NULL
@@ -250,8 +243,6 @@ app.post('/api/auth/login', async (req, res) => {
 
 
 // ---- RUTAS MÓDULO 1: VOLUNTARIOS ----
-// (Rutas /api/cumpleaneros/* cambiadas a /api/voluntarios/*)
-
 app.get('/api/voluntarios/hoy', async (req, res) => {
     console.log("¡Recibida petición para cumpleaños de voluntarios de hoy!");
     try {
@@ -388,14 +379,15 @@ app.get('/api/voluntarios/buscar', async (req, res) => {
 
 // ---- RUTAS MÓDULO 2: BENEFACTORES ----
 
-// Ruta para cumpleaños de HOY (Benefactores) - (Usa la nueva columna 'fecha_fundacion_o_cumpleanos')
+// CORREGIDO: Se usa 'nombre_benefactor' y se le pone alias 'nombre_completo' para el frontend
 app.get('/api/benefactores/hoy', async (req, res) => {
     console.log("¡Recibida petición para cumpleaños de benefactores de hoy!");
     try {
         const sqlQuery = `
-            SELECT nombre_completo, fecha_fundacion_o_cumpleanos 
+            SELECT nombre_benefactor AS nombre_completo, fecha_fundacion_o_cumpleanos 
             FROM benefactores 
             WHERE 
+                fecha_fundacion_o_cumpleanos IS NOT NULL AND
                 MONTH(fecha_fundacion_o_cumpleanos) = MONTH(CURDATE()) 
                 AND 
                 DAY(fecha_fundacion_o_cumpleanos) = DAY(CURDATE());
@@ -404,19 +396,21 @@ app.get('/api/benefactores/hoy', async (req, res) => {
         res.json(resultados);
     } catch (error) {
         console.error("Error al consultar cumpleaños benefactores:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        res.status(500).json({ mensaje: "Error en el servidor", detalle: error.message });
     }
 });
 
-// Ruta para PRÓXIMOS PAGOS (Benefactores)
+// CORREGIDO: Se usa 'nombre_benefactor' como 'nombre_completo'
 app.get('/api/benefactores/pagos', async (req, res) => {
     console.log("¡Recibida petición para pagos de benefactores!");
     try {
         const sqlQuery = `
-            SELECT id, nombre_completo, fecha_proximo_pago, estado_pago 
+            SELECT id, nombre_benefactor AS nombre_completo, fecha_proximo_pago, estado_pago 
             FROM benefactores
             WHERE 
                 (estado_pago = 'Pendiente' OR estado_pago = 'Vencido')
+                AND
+                fecha_proximo_pago IS NOT NULL
                 AND
                 fecha_proximo_pago <= DATE_ADD(CURDATE(), INTERVAL 7 DAY)
             ORDER BY
@@ -426,12 +420,13 @@ app.get('/api/benefactores/pagos', async (req, res) => {
         res.json(resultados);
     } catch (error) {
         console.error("Error al consultar pagos:", error);
-        res.status(500).json({ mensaje: "Error en el servidor" });
+        res.status(500).json({ mensaje: "Error en el servidor", detalle: error.message });
     }
 });
 
 
 // Ruta para CREAR BENEFACTOR y su primera DONACIÓN
+// CORREGIDO: Insertar en 'nombre_benefactor' y 'numero_contacto'
 app.post('/api/benefactores/nuevo', async (req, res) => {
     console.log('Recibida solicitud para crear nuevo benefactor');
     const connection = await dbPool.getConnection();
@@ -440,16 +435,15 @@ app.post('/api/benefactores/nuevo', async (req, res) => {
         await connection.beginTransaction();
         const benefactorData = req.body;
 
-        // Convertir arrays a JSON strings para guardar en la BD
         const telefonosString = JSON.stringify(benefactorData.telefonos);
         const correosString = JSON.stringify(benefactorData.correos);
 
-        // 1. Insertar en 'benefactores'
+        // 1. Insertar en 'benefactores' (Nombres de columna actualizados a tu DB real)
         const benefactorQuery = `
             INSERT INTO benefactores (
-                cod_1_tipo, naturaleza, tipo_documento, numero_documento, nombre_completo,
+                cod_1_tipo, naturaleza, tipo_documento, numero_documento, nombre_benefactor,
                 nombre_contactado, 
-                telefonos, 
+                numero_contacto, 
                 correo, 
                 fecha_fundacion_o_cumpleanos,
                 direccion, departamento, ciudad, empresa, cargo, estado_civil, conyuge,
@@ -465,11 +459,11 @@ app.post('/api/benefactores/nuevo', async (req, res) => {
             benefactorData.naturaleza,
             benefactorData.tipo_documento,
             benefactorData.numero_documento,
-            benefactorData.nombre_completo,
+            benefactorData.nombre_completo, // El frontend envía 'nombre_completo', lo guardamos en 'nombre_benefactor'
             benefactorData.nombre_contactado,
             
-            telefonosString, // JSON de teléfonos
-            correosString, // JSON de correos
+            telefonosString, // Se guarda en 'numero_contacto'
+            correosString,   // Se guarda en 'correo'
             
             benefactorData.fecha_fundacion_o_cumpleanos || null,
             benefactorData.direccion,
@@ -511,12 +505,10 @@ app.post('/api/benefactores/nuevo', async (req, res) => {
             benefactorData.observaciones
         ]);
 
-        // Si todo va bien, confirmamos los cambios
         await connection.commit();
         res.status(201).json({ mensaje: "Benefactor y donación creados con éxito", id: newBenefactorId });
 
     } catch (error) {
-        // Si algo falla, revertimos
         await connection.rollback();
         console.error("Error al crear benefactor:", error);
         res.status(500).json({ mensaje: "Error al guardar en la base de datos", error: error.message });
@@ -527,7 +519,7 @@ app.post('/api/benefactores/nuevo', async (req, res) => {
 // ---- FIN RUTAS BENEFACTORES ----
 
 
-// ---- NUEVO: RUTAS MÓDULO 3: TRANSPORTE ----
+// ---- RUTAS MÓDULO 3: TRANSPORTE ----
 app.get('/api/transporte/vencimientos', async (req, res) => {
     console.log("¡Recibida petición para vencimientos de transporte!");
     try {
@@ -554,8 +546,6 @@ app.get('/api/transporte/vencimientos', async (req, res) => {
                     IFNULL(fecha_vencimiento_licencia, '9999-12-31')
                 ) ASC;
         `;
-        // Nota: He cambiado (BETWEEN CURDATE() AND DATE_ADD) a (<= DATE_ADD)
-        // para incluir también los que ya están vencidos.
 
         const [resultados] = await dbPool.query(sqlQuery);
         res.json(resultados);
@@ -571,12 +561,16 @@ app.get('/api/transporte/vencimientos', async (req, res) => {
 app.get('/api/test-email-hoy', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (HOY) INICIADA!!");
     res.json({ mensaje: "Prueba de email (HOY) iniciada. Revisa los logs." });
-    revisarCumpleanosHoy(); 
+    // Por defecto voluntario
+    revisarCumpleanosHoy('voluntarios', 'fecha_nacimiento', 'TEST VOLUNTARIO', 'nombre_completo'); 
+    // Y benefactor
+    revisarCumpleanosHoy('benefactores', 'fecha_fundacion_o_cumpleanos', 'TEST BENEFACTOR', 'nombre_benefactor'); 
 });
 app.get('/api/test-email-4dias', (req, res) => {
     console.log("¡¡PRUEBA MANUAL DE EMAIL (4 DÍAS) INICIADA!!");
     res.json({ mensaje: "Prueba de email (4 DÍAS) iniciada. Revisa los logs." });
-    revisarCumpleanosCuatroDias();
+    revisarCumpleanosCuatroDias('voluntarios', 'fecha_nacimiento', 'TEST VOL', 'nombre_completo');
+    revisarCumpleanosCuatroDias('benefactores', 'fecha_fundacion_o_cumpleanos', 'TEST BEN', 'nombre_benefactor');
 });
 // ---- FIN DE RUTAS DE PRUEBA ----
 
@@ -585,5 +579,5 @@ app.get('/api/test-email-4dias', (req, res) => {
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
     console.log(`Servidor API corriendo en puerto ${PORT}`);
-    console.log('Tareas CRON (Voluntarios) activadas.');
+    console.log('Tareas CRON (Voluntarios y Benefactores) activadas.');
 });
