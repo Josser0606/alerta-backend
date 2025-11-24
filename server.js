@@ -516,6 +516,30 @@ app.post('/api/benefactores/nuevo', async (req, res) => {
         connection.release();
     }
 });
+
+app.get('/api/benefactores/buscar', async (req, res) => {
+    try {
+        const { nombre } = req.query;
+        if (!nombre) {
+            return res.json([]);
+        }
+        const searchTerm = `%${nombre}%`;
+        // Buscamos por nombre del benefactor o por la empresa
+        const sqlQuery = `
+            SELECT id, nombre_benefactor AS nombre_completo, empresa, fecha_fundacion_o_cumpleanos AS fecha_nacimiento 
+            FROM benefactores 
+            WHERE nombre_benefactor LIKE ? OR empresa LIKE ?
+            ORDER BY nombre_benefactor ASC
+            LIMIT 10;
+        `;
+        // Pasamos el término de búsqueda dos veces (una para nombre, otra para empresa)
+        const [resultados] = await dbPool.query(sqlQuery, [searchTerm, searchTerm]);
+        res.json(resultados);
+    } catch (error) {
+        console.error("Error en la búsqueda de benefactores:", error);
+        res.status(500).json({ mensaje: "Error en el servidor" });
+    }
+});
 // ---- FIN RUTAS BENEFACTORES ----
 
 
