@@ -191,4 +191,46 @@ router.get('/buscar', async (req, res) => {
     }
 });
 
+// 6. ACTUALIZAR BENEFACTOR
+router.put('/editar/:id', async (req, res) => {
+    const { id } = req.params;
+    const benefactorData = req.body;
+
+    try {
+        const telefonosString = JSON.stringify(benefactorData.telefonos);
+        const correosString = JSON.stringify(benefactorData.correos);
+
+        const sqlQuery = `
+            UPDATE benefactores SET
+                cod_1_tipo = ?, naturaleza = ?, tipo_documento = ?, numero_documento = ?, 
+                nombre_benefactor = ?, nombre_contactado = ?, numero_contacto = ?, correo = ?, 
+                fecha_fundacion_o_cumpleanos = ?, direccion = ?, departamento = ?, ciudad = ?, 
+                empresa = ?, cargo = ?, estado_civil = ?, conyuge = ?, protocolo = ?, 
+                contacto_saciar = ?, estado = ?, autorizacion_datos = ?, fecha_rut_actualizado = ?, 
+                certificado_donacion = ?, certificado_donacion_detalle = ?, fecha_actualizacion_clinton = ?, 
+                antecedentes_judiciales = ?, encuesta_satisfaccion = ?
+            WHERE id = ?
+        `;
+
+        await dbPool.query(sqlQuery, [
+            benefactorData.cod_1_tipo, benefactorData.naturaleza, benefactorData.tipo_documento, 
+            benefactorData.numero_documento, benefactorData.nombre_completo, benefactorData.nombre_contactado,
+            telefonosString, correosString, benefactorData.fecha_fundacion_o_cumpleanos || null,
+            benefactorData.direccion, benefactorData.departamento, benefactorData.ciudad,
+            benefactorData.empresa, benefactorData.cargo, benefactorData.estado_civil || null,
+            benefactorData.conyuge, benefactorData.protocolo, benefactorData.contacto_saciar,
+            benefactorData.estado, benefactorData.autorizacion_datos, benefactorData.fecha_rut_actualizado,
+            benefactorData.certificado_donacion, benefactorData.certificado_donacion_detalle,
+            benefactorData.fecha_actualizacion_clinton || null, benefactorData.antecedentes_judiciales,
+            benefactorData.encuesta_satisfaccion,
+            id
+        ]);
+
+        res.json({ mensaje: "Benefactor actualizado correctamente" });
+    } catch (error) {
+        console.error("Error al actualizar:", error);
+        res.status(500).json({ mensaje: "Error al actualizar datos" });
+    }
+});
+
 module.exports = router;

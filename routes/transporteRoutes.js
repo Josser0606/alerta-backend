@@ -82,4 +82,56 @@ router.post('/nuevo', async (req, res) => {
     }
 });
 
+// 3. LISTAR TODOS LOS VEHÍCULOS (Para la gestión)
+router.get('/todos', async (req, res) => {
+    try {
+        // Buscador simple por placa o descripción
+        const { search } = req.query;
+        let sql = `SELECT * FROM vehiculos`;
+        let params = [];
+
+        if (search) {
+            sql += ` WHERE placa LIKE ? OR descripcion LIKE ?`;
+            params.push(`%${search}%`, `%${search}%`);
+        }
+        
+        sql += ` ORDER BY placa ASC`;
+
+        const [rows] = await dbPool.query(sql, params);
+        res.json(rows);
+    } catch (error) {
+        console.error("Error al listar vehículos:", error);
+        res.status(500).json({ mensaje: "Error al obtener vehículos" });
+    }
+});
+
+// 4. ACTUALIZAR VEHÍCULO
+router.put('/editar/:id', async (req, res) => {
+    const { id } = req.params;
+    const { 
+        placa, descripcion, conductor_asignado, 
+        fecha_vencimiento_soat, fecha_vencimiento_tecnomecanica, fecha_vencimiento_licencia 
+    } = req.body;
+
+    try {
+        const sql = `
+            UPDATE vehiculos SET 
+                placa = ?, descripcion = ?, conductor_asignado = ?,
+                fecha_vencimiento_soat = ?, fecha_vencimiento_tecnomecanica = ?, fecha_vencimiento_licencia = ?
+            WHERE id = ?
+        `;
+        
+        await dbPool.query(sql, [
+            placa, descripcion, conductor_asignado,
+            fecha_vencimiento_soat || null, fecha_vencimiento_tecnomecanica || null, fecha_vencimiento_licencia || null,
+            id
+        ]);
+
+        res.json({ mensaje: "Vehículo actualizado correctamente" });
+    } catch (error) {
+        console.error("Error al actualizar vehículo:", error);
+        res.status(500).json({ mensaje: "Error al actualizar" });
+    }
+});
+
 module.exports = router;
