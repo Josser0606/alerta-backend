@@ -598,15 +598,56 @@ app.get('/api/test-email-4dias', (req, res) => {
 });
 // ---- FIN DE RUTAS DE PRUEBA ----
 
-// ---- NUEVA RUTA: OBTENER TODOS LOS BENEFACTORES ----
+// ---- RUTA OPTIMIZADA: OBTENER BENEFACTORES CON PAGINACIÓN Y BÚSQUEDA ----
 app.get('/api/benefactores/todos', async (req, res) => {
     try {
-        // Seleccionamos todo y ordenamos alfabéticamente
-        const sqlQuery = `SELECT * FROM benefactores ORDER BY nombre_benefactor ASC`;
-        const [resultados] = await dbPool.query(sqlQuery);
-        res.json(resultados);
+        // 1. Recibimos parámetros (con valores por defecto)
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20; // 20 items por página
+        const search = req.query.search || ''; // Texto de búsqueda opcional
+        const offset = (page - 1) * limit;
+
+        // 2. Preparamos la condición de búsqueda (WHERE)
+        let whereClause = '';
+        let queryParams = [];
+
+        if (search) {
+            whereClause = 'WHERE nombre_benefactor LIKE ? OR numero_documento LIKE ?';
+            queryParams.push(`%${search}%`, `%${search}%`);
+        }
+
+        // 3. Consulta PRINCIPAL (Datos)
+        // Añadimos LIMIT y OFFSET para traer solo la página actual
+        const sqlData = `
+            SELECT * FROM benefactores 
+            ${whereClause}
+            ORDER BY nombre_benefactor ASC 
+            LIMIT ? OFFSET ?
+        `;
+        // Añadimos limit y offset a los parámetros
+        const dataParams = [...queryParams, limit, offset];
+        const [rows] = await dbPool.query(sqlData, dataParams);
+
+        // 4. Consulta de CONTEO (Para saber cuántas páginas hay en total)
+        const sqlCount = `SELECT COUNT(*) as total FROM benefactores ${whereClause}`;
+        const [countResult] = await dbPool.query(sqlCount, queryParams);
+        
+        const totalItems = countResult[0].total;
+        const totalPages = Math.ceil(totalItems / limit);
+
+        // 5. Enviamos la respuesta estructurada
+        res.json({
+            data: rows,
+            pagination: {
+                page,
+                limit,
+                totalItems,
+                totalPages
+            }
+        });
+
     } catch (error) {
-        console.error("Error al obtener lista completa:", error);
+        console.error("Error al obtener lista paginada:", error);
         res.status(500).json({ mensaje: "Error al obtener la lista" });
     }
 });
