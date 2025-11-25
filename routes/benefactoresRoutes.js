@@ -191,16 +191,44 @@ router.get('/buscar', async (req, res) => {
     }
 });
 
-// 6. ACTUALIZAR BENEFACTOR
+// 6. OBTENER BENEFACTOR INDIVIDUAL (CON DATOS DE DONACIÓN) - ¡NUEVA RUTA!
+router.get('/detalle/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        
+        // A. Datos del Benefactor
+        const [benefactor] = await dbPool.query('SELECT * FROM benefactores WHERE id = ?', [id]);
+        if (benefactor.length === 0) {
+            return res.status(404).json({ mensaje: "Benefactor no encontrado" });
+        }
+
+        // B. Datos de la Donación (Traemos la más reciente asociada a este ID)
+        const [donacion] = await dbPool.query('SELECT * FROM donaciones WHERE benefactor_id = ? ORDER BY id DESC LIMIT 1', [id]);
+
+        // C. Combinamos ambos objetos en uno solo
+        const datosCompletos = { ...benefactor[0], ...(donacion[0] || {}) };
+
+        res.json(datosCompletos);
+    } catch (error) {
+        console.error("Error al obtener detalle:", error);
+        res.status(500).json({ mensaje: "Error al cargar datos completos" });
+    }
+});
+
+// 7. ACTUALIZAR BENEFACTOR (CORREGIDO: Ahora actualiza Benefactor Y Donación)
 router.put('/editar/:id', async (req, res) => {
     const { id } = req.params;
     const benefactorData = req.body;
+    const connection = await dbPool.getConnection(); // Usamos transacción para seguridad
 
     try {
+        await connection.beginTransaction();
+
+        // A. Actualizar Tabla BENEFACTORES
         const telefonosString = JSON.stringify(benefactorData.telefonos);
         const correosString = JSON.stringify(benefactorData.correos);
 
-        const sqlQuery = `
+        const sqlBenefactor = `
             UPDATE benefactores SET
                 cod_1_tipo = ?, naturaleza = ?, tipo_documento = ?, numero_documento = ?, 
                 nombre_benefactor = ?, nombre_contactado = ?, numero_contacto = ?, correo = ?, 
@@ -212,7 +240,7 @@ router.put('/editar/:id', async (req, res) => {
             WHERE id = ?
         `;
 
-        await dbPool.query(sqlQuery, [
+        await connection.query(sqlBenefactor, [
             benefactorData.cod_1_tipo, benefactorData.naturaleza, benefactorData.tipo_documento, 
             benefactorData.numero_documento, benefactorData.nombre_completo, benefactorData.nombre_contactado,
             telefonosString, correosString, benefactorData.fecha_fundacion_o_cumpleanos || null,
@@ -226,10 +254,30 @@ router.put('/editar/:id', async (req, res) => {
             id
         ]);
 
-        res.json({ mensaje: "Benefactor actualizado correctamente" });
+        // B. Actualizar Tabla DONACIONES (La última asociada)
+        const sqlDonacion = `
+            UPDATE donaciones SET
+                tipo_donacion = ?, procedencia = ?, procedencia_2 = ?, 
+                detalles_donacion = ?, fecha_donacion = ?, observaciones = ?
+            WHERE benefactor_id = ? 
+            ORDER BY id DESC LIMIT 1
+        `;
+
+        await connection.query(sqlDonacion, [
+            benefactorData.tipo_donacion, benefactorData.procedencia, benefactorData.procedencia_2,
+            benefactorData.detalles_donacion, benefactorData.fecha_donacion, benefactorData.observaciones,
+            id
+        ]);
+
+        await connection.commit();
+        res.json({ mensaje: "Benefactor actualizado correctamente (incluyendo donación)" });
+
     } catch (error) {
+        await connection.rollback();
         console.error("Error al actualizar:", error);
-        res.status(500).json({ mensaje: "Error al actualizar datos" });
+        res.status(500).json({ mensaje: "Error al actualizar datos", error: error.message });
+    } finally {
+        connection.release();
     }
 });
 
