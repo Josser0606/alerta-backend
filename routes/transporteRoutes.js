@@ -134,4 +134,21 @@ router.put('/editar/:id', async (req, res) => {
     }
 });
 
+// 5. ELIMINAR VEHÍCULO
+router.delete('/eliminar/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [result] = await dbPool.query('DELETE FROM vehiculos WHERE id = ?', [id]);
+        
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ mensaje: "Vehículo no encontrado" });
+        }
+        
+        res.json({ mensaje: "Vehículo eliminado correctamente" });
+    } catch (error) {
+        console.error("Error al eliminar vehículo:", error);
+        res.status(500).json({ mensaje: "Error al eliminar" });
+    }
+});
+
 module.exports = router;
