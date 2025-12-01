@@ -355,4 +355,34 @@ router.put('/editar/:id', async (req, res) => {
     }
 });
 
+// 8. ELIMINAR BENEFACTOR (Y SUS DONACIONES ASOCIADAS)
+router.delete('/eliminar/:id', async (req, res) => {
+    const { id } = req.params;
+    const connection = await dbPool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        // 1. Primero borramos las donaciones asociadas (para evitar error de llave foránea)
+        await connection.query('DELETE FROM donaciones WHERE benefactor_id = ?', [id]);
+
+        // 2. Luego borramos al benefactor
+        const [result] = await connection.query('DELETE FROM benefactores WHERE id = ?', [id]);
+
+        if (result.affectedRows === 0) {
+            throw new Error("Benefactor no encontrado");
+        }
+
+        await connection.commit();
+        res.json({ mensaje: "Benefactor eliminado correctamente" });
+
+    } catch (error) {
+        await connection.rollback();
+        console.error("Error al eliminar:", error);
+        res.status(500).json({ mensaje: "Error al eliminar", error: error.message });
+    } finally {
+        connection.release();
+    }
+});
+
 module.exports = router;
