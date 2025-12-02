@@ -178,20 +178,23 @@ router.get('/todos', async (req, res) => {
     }
 });
 
-// 5. BUSCADOR RÁPIDO (Para la barra del Header)
+// 5. BUSCADOR RÁPIDO
 router.get('/buscar', async (req, res) => {
     try {
         const { nombre } = req.query;
         if (!nombre) return res.json([]);
         
         const searchTerm = `%${nombre}%`;
+
+        // --- CORRECCIÓN AQUÍ: Agregamos LOWER() ---
         const sqlQuery = `
             SELECT id, nombre_benefactor AS nombre_completo, empresa, fecha_fundacion_o_cumpleanos AS fecha_nacimiento 
             FROM benefactores 
-            WHERE nombre_benefactor LIKE ? OR empresa LIKE ?
+            WHERE LOWER(nombre_benefactor) LIKE LOWER(?) OR LOWER(empresa) LIKE LOWER(?)
             ORDER BY nombre_benefactor ASC
             LIMIT 10;
         `;
+        
         const [resultados] = await dbPool.query(sqlQuery, [searchTerm, searchTerm]);
         res.json(resultados);
     } catch (error) {
