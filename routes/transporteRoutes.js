@@ -82,17 +82,18 @@ router.post('/nuevo', async (req, res) => {
     }
 });
 
-// 3. LISTAR TODOS LOS VEHÍCULOS (Para la gestión)
+// 3. LISTAR TODOS LOS VEHÍCULOS (Con búsqueda por PLACA)
 router.get('/todos', async (req, res) => {
     try {
-        // Buscador simple por placa o descripción
         const { search } = req.query;
         let sql = `SELECT * FROM vehiculos`;
         let params = [];
 
         if (search) {
-            sql += ` WHERE placa LIKE ? OR descripcion LIKE ?`;
-            params.push(`%${search}%`, `%${search}%`);
+            // CAMBIO AQUÍ: Solo buscamos por placa
+            // Usamos LIKE para que puedan buscar parciales (ej: "AAA")
+            sql += ` WHERE placa LIKE ?`;
+            params.push(`%${search}%`);
         }
         
         sql += ` ORDER BY placa ASC`;
