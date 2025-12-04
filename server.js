@@ -23,6 +23,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/voluntarios', voluntariosRoutes);
 app.use('/api/benefactores', benefactoresRoutes);
 app.use('/api/transporte', transporteRoutes);
+app.use('/api/inventario', require('./routes/inventarioRoutes'));
 
 // Ruta de prueba rápida
 app.get('/api/test-email-hoy', (req, res) => {
