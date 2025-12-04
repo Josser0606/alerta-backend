@@ -178,6 +178,41 @@ router.get('/todos', async (req, res) => {
     }
 });
 
+// 8. RESUMEN (Para la campanita)
+router.get('/resumen', async (req, res) => {
+    try {
+        // Contar cumpleaños de HOY
+        const sqlHoy = `
+            SELECT COUNT(*) as count 
+            FROM benefactores 
+            WHERE fecha_fundacion_o_cumpleanos IS NOT NULL 
+            AND MONTH(fecha_fundacion_o_cumpleanos) = MONTH(CURDATE()) 
+            AND DAY(fecha_fundacion_o_cumpleanos) = DAY(CURDATE());
+        `;
+        
+        // Contar pagos pendientes próximos (7 días)
+        const sqlPagos = `
+            SELECT COUNT(*) as count 
+            FROM benefactores
+            WHERE (estado_pago = 'Pendiente' OR estado_pago = 'Vencido')
+            AND fecha_proximo_pago <= DATE_ADD(CURDATE(), INTERVAL 7 DAY);
+        `;
+
+        const [resHoy, resPagos] = await Promise.all([
+            dbPool.query(sqlHoy),
+            dbPool.query(sqlPagos)
+        ]);
+
+        // Devolvemos una estructura similar para que el frontend la entienda fácil
+        // 'hoy' = cumpleaños, 'proximos' = pagos pendientes
+        res.json({ hoy: resHoy[0][0].count, proximos: resPagos[0][0].count });
+
+    } catch (error) {
+        console.error("Error resumen benefactores:", error);
+        res.status(500).json({ mensaje: "Error servidor" });
+    }
+});
+
 // 5. BUSCADOR RÁPIDO
 router.get('/buscar', async (req, res) => {
     try {
