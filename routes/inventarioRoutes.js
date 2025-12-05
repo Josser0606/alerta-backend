@@ -129,4 +129,44 @@ router.delete('/eliminar/:id', async (req, res) => {
     }
 });
 
+// 5. OBTENER SIGUIENTE CÓDIGO (Para previsualización en frontend)
+router.get('/siguiente-codigo/:categoria', async (req, res) => {
+    try {
+        const { categoria } = req.params;
+        
+        // Buscamos el último código de esa categoría
+        const sqlUltimo = `
+            SELECT codigo_serie 
+            FROM inventario 
+            WHERE codigo_serie LIKE CONCAT(?, '%')
+            ORDER BY LENGTH(codigo_serie) DESC, codigo_serie DESC 
+            LIMIT 1
+        `;
+        
+        const [rows] = await dbPool.query(sqlUltimo, [categoria]);
+        
+        let nuevoNumero = 1;
+        
+        if (rows.length > 0) {
+            const ultimoCodigo = rows[0].codigo_serie;
+            const parteNumerica = ultimoCodigo.replace(categoria, '');
+            const numeroAnterior = parseInt(parteNumerica, 10);
+            
+            if (!isNaN(numeroAnterior)) {
+                nuevoNumero = numeroAnterior + 1;
+            }
+        }
+        
+        // Formateamos: Si es 1 -> '0001'
+        const numeroFormateado = String(nuevoNumero).padStart(4, '0');
+        const siguienteCodigo = `${categoria}${numeroFormateado}`;
+
+        res.json({ siguienteCodigo });
+
+    } catch (error) {
+        console.error("Error al obtener siguiente código:", error);
+        res.status(500).json({ mensaje: "Error al calcular código" });
+    }
+});
+
 module.exports = router;
