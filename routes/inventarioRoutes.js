@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const dbPool = require('../config/db');
 
-// 1. LISTAR TODO (Con búsqueda por código o descripción)
+// 1. LISTAR TODO
 router.get('/todos', async (req, res) => {
     try {
         const { search } = req.query;
@@ -24,25 +24,72 @@ router.get('/todos', async (req, res) => {
     }
 });
 
-// 2. CREAR ITEM
+// 2. CREAR ITEM (CORREGIDO: Generación de código robusta)
 router.post('/nuevo', async (req, res) => {
+    const connection = await dbPool.getConnection();
     try {
+        await connection.beginTransaction();
+        
         const data = req.body;
-        const sql = `
+        
+        if (!data.categoria) {
+            throw new Error("La categoría es obligatoria para generar el código.");
+        }
+
+        // --- CORRECCIÓN AQUÍ ---
+        // Buscamos por el CÓDIGO (texto) más alto, no por el ID.
+        // Usamos 'LIKE' para encontrar cualquier código que empiece con el prefijo (ej: FLT%)
+        // Ordenamos por longitud primero y luego por texto para que FLT10 sea mayor que FLT2
+        const sqlUltimo = `
+            SELECT codigo_serie 
+            FROM inventario 
+            WHERE codigo_serie LIKE CONCAT(?, '%')
+            ORDER BY LENGTH(codigo_serie) DESC, codigo_serie DESC 
+            LIMIT 1
+        `;
+        
+        const [rows] = await connection.query(sqlUltimo, [data.categoria]);
+        
+        let nuevoNumero = 1;
+        
+        if (rows.length > 0) {
+            const ultimoCodigo = rows[0].codigo_serie; // Ej: FLT0005
+            // Quitamos las letras de la categoría para quedarnos solo con el número
+            const parteNumerica = ultimoCodigo.replace(data.categoria, '');
+            const numeroAnterior = parseInt(parteNumerica, 10);
+            
+            if (!isNaN(numeroAnterior)) {
+                nuevoNumero = numeroAnterior + 1;
+            }
+        }
+        
+        // Rellenamos con ceros (ej: 0006)
+        const numeroFormateado = String(nuevoNumero).padStart(4, '0');
+        const nuevoCodigoSerie = `${data.categoria}${numeroFormateado}`;
+
+        const sqlInsert = `
             INSERT INTO inventario (
                 codigo_serie, centro_operacion, area_principal, tipo_producto,
-                descripcion, area_asignada, sub_area_asignada, cargo_asignado
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                descripcion, area_asignada, sub_area_asignada, cargo_asignado, categoria
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        await dbPool.query(sql, [
-            data.codigo_serie, data.centro_operacion, data.area_principal, data.tipo_producto,
-            data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado
+        
+        await connection.query(sqlInsert, [
+            nuevoCodigoSerie, data.centro_operacion, data.area_principal, data.tipo_producto,
+            data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado, 
+            data.categoria 
         ]);
-        res.status(201).json({ mensaje: "Item registrado con éxito" });
+
+        await connection.commit();
+        res.status(201).json({ mensaje: `Item registrado con éxito. Código: ${nuevoCodigoSerie}` });
+
     } catch (error) {
+        await connection.rollback();
         console.error("Error al crear item:", error);
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ mensaje: "El código de serie ya existe." });
-        res.status(500).json({ mensaje: "Error al guardar" });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ mensaje: "El código generado ya existe. Intente nuevamente." });
+        res.status(500).json({ mensaje: error.message || "Error al guardar" });
+    } finally {
+        connection.release();
     }
 });
 
@@ -51,14 +98,15 @@ router.put('/editar/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const data = req.body;
+        
         const sql = `
             UPDATE inventario SET
-                codigo_serie=?, centro_operacion=?, area_principal=?, tipo_producto=?,
+                centro_operacion=?, area_principal=?, tipo_producto=?,
                 descripcion=?, area_asignada=?, sub_area_asignada=?, cargo_asignado=?
             WHERE id=?
         `;
         await dbPool.query(sql, [
-            data.codigo_serie, data.centro_operacion, data.area_principal, data.tipo_producto,
+            data.centro_operacion, data.area_principal, data.tipo_producto,
             data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado,
             id
         ]);
