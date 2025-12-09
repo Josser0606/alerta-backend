@@ -99,15 +99,17 @@ router.put('/editar/:id', async (req, res) => {
         const { id } = req.params;
         const data = req.body;
         
+        // Agregamos 'estado=?' a la consulta
         const sql = `
             UPDATE inventario SET
                 centro_operacion=?, area_principal=?, tipo_producto=?,
-                descripcion=?, area_asignada=?, sub_area_asignada=?, cargo_asignado=?
+                descripcion=?, area_asignada=?, sub_area_asignada=?, cargo_asignado=?, estado=? 
             WHERE id=?
         `;
         await dbPool.query(sql, [
             data.centro_operacion, data.area_principal, data.tipo_producto,
             data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado,
+            data.estado, // <--- Importante: pasar el estado aquí
             id
         ]);
         res.json({ mensaje: "Item actualizado correctamente" });
