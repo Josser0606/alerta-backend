@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const dbPool = require('../config/db');
 
-// 1. LISTAR TODO
+// 1. LISTAR TODO (Corregido el orden)
 router.get('/todos', async (req, res) => {
     try {
         const { search } = req.query;
@@ -14,7 +14,8 @@ router.get('/todos', async (req, res) => {
             params.push(`%${search}%`, `%${search}%`);
         }
         
-        sql += ` ORDER BY id DESC`;
+        // CAMBIO AQUÍ: Ordenamos por código ASCENDENTE (A-Z) para ver la secuencia (001, 002...)
+        sql += ` ORDER BY codigo_serie ASC`;
 
         const [rows] = await dbPool.query(sql, params);
         res.json(rows);
@@ -24,7 +25,7 @@ router.get('/todos', async (req, res) => {
     }
 });
 
-// 2. CREAR ITEM (CORREGIDO: Generación de código robusta)
+// 2. CREAR ITEM (Lógica de Código Automático)
 router.post('/nuevo', async (req, res) => {
     const connection = await dbPool.getConnection();
     try {
@@ -36,10 +37,7 @@ router.post('/nuevo', async (req, res) => {
             throw new Error("La categoría es obligatoria para generar el código.");
         }
 
-        // --- CORRECCIÓN AQUÍ ---
-        // Buscamos por el CÓDIGO (texto) más alto, no por el ID.
-        // Usamos 'LIKE' para encontrar cualquier código que empiece con el prefijo (ej: FLT%)
-        // Ordenamos por longitud primero y luego por texto para que FLT10 sea mayor que FLT2
+        // Buscamos el último código de esa categoría para incrementar
         const sqlUltimo = `
             SELECT codigo_serie 
             FROM inventario 
@@ -53,8 +51,7 @@ router.post('/nuevo', async (req, res) => {
         let nuevoNumero = 1;
         
         if (rows.length > 0) {
-            const ultimoCodigo = rows[0].codigo_serie; // Ej: FLT0005
-            // Quitamos las letras de la categoría para quedarnos solo con el número
+            const ultimoCodigo = rows[0].codigo_serie;
             const parteNumerica = ultimoCodigo.replace(data.categoria, '');
             const numeroAnterior = parseInt(parteNumerica, 10);
             
@@ -63,21 +60,20 @@ router.post('/nuevo', async (req, res) => {
             }
         }
         
-        // Rellenamos con ceros (ej: 0006)
         const numeroFormateado = String(nuevoNumero).padStart(4, '0');
         const nuevoCodigoSerie = `${data.categoria}${numeroFormateado}`;
 
         const sqlInsert = `
             INSERT INTO inventario (
                 codigo_serie, centro_operacion, area_principal, tipo_producto,
-                descripcion, area_asignada, sub_area_asignada, cargo_asignado, categoria
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                descripcion, area_asignada, sub_area_asignada, cargo_asignado, categoria, estado
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         
         await connection.query(sqlInsert, [
             nuevoCodigoSerie, data.centro_operacion, data.area_principal, data.tipo_producto,
             data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado, 
-            data.categoria 
+            data.categoria, data.estado || 'Sin Prioridad'
         ]);
 
         await connection.commit();
@@ -86,7 +82,7 @@ router.post('/nuevo', async (req, res) => {
     } catch (error) {
         await connection.rollback();
         console.error("Error al crear item:", error);
-        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ mensaje: "El código generado ya existe. Intente nuevamente." });
+        if (error.code === 'ER_DUP_ENTRY') return res.status(400).json({ mensaje: "Error: El código generado ya existe." });
         res.status(500).json({ mensaje: error.message || "Error al guardar" });
     } finally {
         connection.release();
@@ -99,7 +95,6 @@ router.put('/editar/:id', async (req, res) => {
         const { id } = req.params;
         const data = req.body;
         
-        // Agregamos 'estado=?' a la consulta
         const sql = `
             UPDATE inventario SET
                 centro_operacion=?, area_principal=?, tipo_producto=?,
@@ -109,7 +104,7 @@ router.put('/editar/:id', async (req, res) => {
         await dbPool.query(sql, [
             data.centro_operacion, data.area_principal, data.tipo_producto,
             data.descripcion, data.area_asignada, data.sub_area_asignada, data.cargo_asignado,
-            data.estado, // <--- Importante: pasar el estado aquí
+            data.estado,
             id
         ]);
         res.json({ mensaje: "Item actualizado correctamente" });
@@ -131,12 +126,11 @@ router.delete('/eliminar/:id', async (req, res) => {
     }
 });
 
-// 5. OBTENER SIGUIENTE CÓDIGO (Para previsualización en frontend)
+// 5. OBTENER SIGUIENTE CÓDIGO (Para el formulario)
 router.get('/siguiente-codigo/:categoria', async (req, res) => {
     try {
         const { categoria } = req.params;
         
-        // Buscamos el último código de esa categoría
         const sqlUltimo = `
             SELECT codigo_serie 
             FROM inventario 
@@ -159,7 +153,6 @@ router.get('/siguiente-codigo/:categoria', async (req, res) => {
             }
         }
         
-        // Formateamos: Si es 1 -> '0001'
         const numeroFormateado = String(nuevoNumero).padStart(4, '0');
         const siguienteCodigo = `${categoria}${numeroFormateado}`;
 
