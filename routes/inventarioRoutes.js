@@ -164,4 +164,21 @@ router.get('/siguiente-codigo/:categoria', async (req, res) => {
     }
 });
 
+// 6. RESUMEN POR CATEGORÍA (Para el Dashboard)
+router.get('/resumen', async (req, res) => {
+    try {
+        const sql = `
+            SELECT categoria, COUNT(*) as total 
+            FROM inventario 
+            GROUP BY categoria
+            ORDER BY total DESC
+        `;
+        const [rows] = await dbPool.query(sql);
+        res.json(rows);
+    } catch (error) {
+        console.error("Error resumen inventario:", error);
+        res.status(500).json({ mensaje: "Error al obtener resumen" });
+    }
+});
+
 module.exports = router;
