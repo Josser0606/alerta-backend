@@ -10,8 +10,8 @@ router.get('/todos', async (req, res) => {
         let params = [];
 
         if (search) {
-            sql += ` WHERE codigo_serie LIKE ? OR descripcion LIKE ?`;
-            params.push(`%${search}%`, `%${search}%`);
+            sql += ` WHERE codigo_serie LIKE ? OR descripcion LIKE ? OR area_principal LIKE ?`;
+            params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
         
         sql += ` ORDER BY codigo_serie ASC`;
